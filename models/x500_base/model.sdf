@@ -1,7 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <sdf version='1.9'>
   <model name='x500_base'>
-    <pose>0 0 .24 0 0 0</pose>
+    <!-- Zeroed (was "0 0 .24"): with the landing gear removed, base_link is
+         the model origin, so dynamic_pose/info (the ground-truth source) now
+         reports the body centre instead of a point 0.24 m below it. This also
+         puts the camera at base_link-0.08 instead of 0.08 m below ground. -->
+    <pose>0 0 0 0 0 0</pose>
     <self_collide>false</self_collide>
     <static>false</static>
     <link name="base_link">
@@ -125,82 +129,6 @@
         <geometry>
           <box>
             <size>0.35355339059327373 0.35355339059327373 0.05</size>
-          </box>
-        </geometry>
-        <surface>
-          <contact>
-            <ode>
-              <min_depth>0.001</min_depth>
-              <max_vel>0</max_vel>
-            </ode>
-          </contact>
-          <friction>
-            <ode />
-          </friction>
-        </surface>
-      </collision>
-      <collision name="base_link_collision_1">
-        <pose>0 -0.098 -.123 -0.35 0 0</pose>
-        <geometry>
-          <box>
-            <size>0.015 0.015 0.21</size>
-          </box>
-        </geometry>
-        <surface>
-          <contact>
-            <ode>
-              <min_depth>0.001</min_depth>
-              <max_vel>0</max_vel>
-            </ode>
-          </contact>
-          <friction>
-            <ode />
-          </friction>
-        </surface>
-      </collision>
-      <collision name="base_link_collision_2">
-        <pose>0 0.098 -.123 0.35 0 0</pose>
-        <geometry>
-          <box>
-            <size>0.015 0.015 0.21</size>
-          </box>
-        </geometry>
-        <surface>
-          <contact>
-            <ode>
-              <min_depth>0.001</min_depth>
-              <max_vel>0</max_vel>
-            </ode>
-          </contact>
-          <friction>
-            <ode />
-          </friction>
-        </surface>
-      </collision>
-      <collision name="base_link_collision_3">
-        <pose>0 -0.132 -.2195 0 0 0</pose>
-        <geometry>
-          <box>
-            <size>0.25 0.015 0.015</size>
-          </box>
-        </geometry>
-        <surface>
-          <contact>
-            <ode>
-              <min_depth>0.001</min_depth>
-              <max_vel>0</max_vel>
-            </ode>
-          </contact>
-          <friction>
-            <ode />
-          </friction>
-        </surface>
-      </collision>
-      <collision name="base_link_collision_4">
-        <pose>0 0.132 -.2195 0 0 0</pose>
-        <geometry>
-          <box>
-            <size>0.25 0.015 0.015</size>
           </box>
         </geometry>
         <surface>
