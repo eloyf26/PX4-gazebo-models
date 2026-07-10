@@ -1,0 +1,227 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  STING flight-recording world: baylands terrain (for scale/visual context)
+  plus a bank of static cameras purpose-placed for filming the takeoff,
+  pitchover transition, and cruise legs of the sting model's flight profile
+  (see benchmarking/envelope/fly_demo.py in the halcon1-system repo).
+
+  Requires models/baylands_park/ (NOT checked into this repo -- ~400MB local
+  copy of the OpenRobotics Fuel "baylands" park model with its high-poly
+  COLLADA collision meshes stripped, since the originals corrupt dartsim's
+  heap; see models/baylands_park/model.config for the exact rationale).
+  Regenerate it from the Fuel model if missing, or swap this world's
+  <include>model://baylands_park</include> for a lighter/flat ground plane.
+-->
+<sdf version='1.9'>
+  <world name='sting_video'>
+    <physics type="ode">
+      <max_step_size>0.004</max_step_size>
+      <real_time_factor>1.0</real_time_factor>
+      <real_time_update_rate>250</real_time_update_rate>
+    </physics>
+    <gravity>0 0 -9.8</gravity>
+    <magnetic_field>6e-06 2.3e-05 -4.2e-05</magnetic_field>
+    <atmosphere type='adiabatic'/>
+    <scene>
+      <ambient>0.8 0.5 1</ambient>
+      <grid>false</grid>
+      <sky>
+        <clouds>true</clouds>
+      </sky>
+      <shadows>1</shadows>
+    </scene>
+    <!--
+      Flat ground-plane collision. The local baylands_park model drops the
+      high-poly mesh collisions (they crash dartsim with malloc(): invalid
+      size). Without any collision the spawned drones free-fall through the
+      terrain, so this provides a trivial collision plane at z=0 — the height
+      the x500 models spawn at — for them to rest on. Collision only, no
+      visual, so the park terrain is still what you see.
+    -->
+    <model name='ground_collision'>
+      <static>true</static>
+      <link name='link'>
+        <collision name='collision'>
+          <geometry>
+            <plane>
+              <normal>0 0 1</normal>
+              <size>2000 2000</size>
+            </plane>
+          </geometry>
+          <surface>
+            <friction>
+              <ode>
+                <mu>1.0</mu>
+                <mu2>1.0</mu2>
+              </ode>
+            </friction>
+          </surface>
+        </collision>
+      </link>
+    </model>
+    <light name='sunUTC' type='directional'>
+      <pose>0 0 500 0 -0 0</pose>
+      <cast_shadows>false</cast_shadows>
+      <intensity>1</intensity>
+      <direction>0.001 0.625 -0.78</direction>
+      <diffuse>0.904 0.904 0.904 1</diffuse>
+      <specular>0.271 0.271 0.271 1</specular>
+      <attenuation>
+        <range>2000</range>
+        <linear>0</linear>
+        <constant>1</constant>
+        <quadratic>0</quadratic>
+      </attenuation>
+    </light>
+    <!--
+      Local park model (Tools/simulation/gz/models/baylands_park) instead of
+      the Fuel-hosted OpenRobotics/baylands. The local copy drops the high-poly
+      COLLADA collision meshes that crash the dartsim physics plugin
+      (malloc(): invalid size) and abort the gz server before render. See that
+      model's model.config for details.
+    -->
+    <include>
+      <uri>model://baylands_park</uri>
+      <name>park</name>
+      <pose>205 155 -1 0 0 0</pose>
+    </include>
+    <include>
+      <uri>
+        https://fuel.gazebosim.org/1.0/OpenRobotics/models/Coast Water
+      </uri>
+      <pose>0 0 -2 0 0 0
+        <relative_to>park</relative_to>
+      </pose>
+    </include>
+    <spherical_coordinates>
+      <surface_model>EARTH_WGS84</surface_model>
+      <world_frame_orientation>ENU</world_frame_orientation>
+      <latitude_deg>37.412173071650805</latitude_deg>
+      <longitude_deg>-121.998878727967</longitude_deg>
+      <elevation>38</elevation>
+    </spherical_coordinates>
+  
+  
+  
+    <model name="cam_pad">
+      <static>true</static>
+      <pose>0 -30 1.5 0 -0.97 1.5708</pose>
+      <link name="cam_link">
+        <sensor name="cam_pad_sensor" type="camera">
+          <update_rate>30</update_rate>
+          <camera>
+            <horizontal_fov>0.9</horizontal_fov>
+            <image><width>1280</width><height>720</height></image>
+            <clip><near>0.05</near><far>5000</far></clip>
+          </camera>
+          <always_on>1</always_on>
+        </sensor>
+      </link>
+    </model>
+    <model name="cam_launch">
+      <static>true</static>
+      <pose>30 0 8 0 -0.3665 3.1416</pose>
+      <link name="cam_link">
+        <sensor name="cam_launch_sensor" type="camera">
+          <update_rate>30</update_rate>
+          <camera>
+            <horizontal_fov>2.2</horizontal_fov>
+            <image><width>1280</width><height>720</height></image>
+            <clip><near>0.05</near><far>5000</far></clip>
+          </camera>
+          <always_on>1</always_on>
+        </sensor>
+      </link>
+    </model>
+    <model name="cam_launch2">
+      <static>true</static>
+      <pose>0 -30 8 0 -0.3665 1.5708</pose>
+      <link name="cam_link">
+        <sensor name="cam_launch2_sensor" type="camera">
+          <update_rate>30</update_rate>
+          <camera>
+            <horizontal_fov>2.2</horizontal_fov>
+            <image><width>1280</width><height>720</height></image>
+            <clip><near>0.05</near><far>5000</far></clip>
+          </camera>
+          <always_on>1</always_on>
+        </sensor>
+      </link>
+    </model>
+    <model name="cam_cruise1">
+      <static>true</static>
+      <pose>25 100 25 0 -0.5 3.1416</pose>
+      <link name="cam_link">
+        <sensor name="cam_cruise1_sensor" type="camera">
+          <update_rate>30</update_rate>
+          <camera>
+            <horizontal_fov>1.4</horizontal_fov>
+            <image><width>1280</width><height>720</height></image>
+            <clip><near>0.05</near><far>5000</far></clip>
+          </camera>
+          <always_on>1</always_on>
+        </sensor>
+      </link>
+    </model>
+    <model name="cam_cruise2">
+      <static>true</static>
+      <pose>25 300 25 0 -0.5 3.1416</pose>
+      <link name="cam_link">
+        <sensor name="cam_cruise2_sensor" type="camera">
+          <update_rate>30</update_rate>
+          <camera>
+            <horizontal_fov>1.4</horizontal_fov>
+            <image><width>1280</width><height>720</height></image>
+            <clip><near>0.05</near><far>5000</far></clip>
+          </camera>
+          <always_on>1</always_on>
+        </sensor>
+      </link>
+    </model>
+    <model name="cam_cruise3">
+      <static>true</static>
+      <pose>25 550 25 0 -0.5 3.1416</pose>
+      <link name="cam_link">
+        <sensor name="cam_cruise3_sensor" type="camera">
+          <update_rate>30</update_rate>
+          <camera>
+            <horizontal_fov>1.4</horizontal_fov>
+            <image><width>1280</width><height>720</height></image>
+            <clip><near>0.05</near><far>5000</far></clip>
+          </camera>
+          <always_on>1</always_on>
+        </sensor>
+      </link>
+    </model>
+    <model name="cam_cruise4">
+      <static>true</static>
+      <pose>25 850 25 0 -0.5 3.1416</pose>
+      <link name="cam_link">
+        <sensor name="cam_cruise4_sensor" type="camera">
+          <update_rate>30</update_rate>
+          <camera>
+            <horizontal_fov>1.4</horizontal_fov>
+            <image><width>1280</width><height>720</height></image>
+            <clip><near>0.05</near><far>5000</far></clip>
+          </camera>
+          <always_on>1</always_on>
+        </sensor>
+      </link>
+    </model>
+    <model name="cam_cruise5">
+      <static>true</static>
+      <pose>25 1200 25 0 -0.5 3.1416</pose>
+      <link name="cam_link">
+        <sensor name="cam_cruise5_sensor" type="camera">
+          <update_rate>30</update_rate>
+          <camera>
+            <horizontal_fov>1.4</horizontal_fov>
+            <image><width>1280</width><height>720</height></image>
+            <clip><near>0.05</near><far>5000</far></clip>
+          </camera>
+          <always_on>1</always_on>
+        </sensor>
+      </link>
+    </model>
+  </world>
+</sdf>
