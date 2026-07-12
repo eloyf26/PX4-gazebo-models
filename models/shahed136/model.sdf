@@ -64,23 +64,30 @@
         </inertia>
       </inertial>
 
-      <!-- Belly collision (no landing gear): flat plate under the delta wing. -->
+      <!-- Belly "skid" (no landing gear): a low-friction SPHERE the airframe rests on.
+           A flat belly BOX plows against the ground plane during the launch roll (its
+           leading edge generates a large horizontal reaction that the pusher cannot
+           overcome, so it never reaches flying speed; gs plateaued near 7 m/s at full
+           thrust). A single-contact-point sphere slides cleanly, so the pusher
+           accelerates the target down the "rail" to rotation speed. Radius 0.13 sits
+           the wing (z=0) about 0.13 m off the ground, matching the spawn pose. Only
+           matters on the ground; once airborne the collision never contacts anything. -->
       <collision name='base_link_collision'>
-        <pose>0 0 -0.06 0 0 0</pose>
+        <pose>0 0 -0.13 0 0 0</pose>
         <geometry>
-          <box>
-            <size>2.0 2.5 0.12</size>
-          </box>
+          <sphere><radius>0.13</radius></sphere>
         </geometry>
         <surface>
           <contact>
             <ode>
-              <max_vel>10</max_vel>
               <min_depth>0.01</min_depth>
             </ode>
           </contact>
           <friction>
-            <ode />
+            <ode>
+              <mu>0.05</mu>
+              <mu2>0.05</mu2>
+            </ode>
           </friction>
         </surface>
       </collision>
@@ -277,14 +284,19 @@
     <!-- ================= REAR PUSHER ROTOR =================
          Mounted at the TAIL (x = -1.7, behind CG). Adapted from advanced_plane
          rotor_puller. Disk in the Y-Z plane (pose rotated 1.57 about y). -->
-    <!-- Rotor mount pitch = -1.57 (NOT +1.57). VERIFIED by isolated gz thrust test
-         (gravity off, motor spun via raw topic, base mass temporarily 2 kg to make
-         the small displacement visible): mount +1.57 thrusts the airframe BACKWARD,
-         mount -1.57 thrusts FORWARD (+x). turningDirection does NOT change thrust
-         direction here (only the reaction torque); both cw/ccw gave the same sign,
-         so the mount rotation is the real lever. This is the pusher-thrust-sign trap. -->
+    <!-- Rotor mount pitch = +1.57 (matches PX4's known-good advanced_plane
+         rotor_puller, pose "... 0 1.57 0"). CORRECTED in Phase-3: the earlier -1.57
+         was re-verified by an isolated groundtruth thrust test (spin the motor at max
+         via the raw /command/motor_speed topic on a model spawned at 3 km altitude and
+         watch the world pose) to thrust the airframe straight UP (it hovered against
+         gravity: dz about 0.3 m in 8 s vs a 314 m free-fall, while dx about 0), NOT
+         forward. The original "verified forward" claim was made with gravity off and a
+         2 kg base and never actually checked the axis. MulticopterMotorModel applies
+         the rotor thrust along the link frame; +1.57 (as advanced_plane uses for its
+         forward-thrusting prop) points it along +X (forward). This was the bug behind
+         the Phase-3 "vehicle never accelerates / EKF hallucinates a climb" failures. -->
     <link name='rotor_pusher'>
-      <pose>-1.7 0 0.1 0 -1.57 0</pose>
+      <pose>-1.7 0 0.1 0 1.57 0</pose>
       <!-- Light rotor (matches advanced_plane rotor_puller) so the motor spins
            up to commanded velocity. A heavy rotor (was 0.5 kg) never reaches
            speed under MulticopterMotorModel's JointVelocityCmd -> ~0 thrust.
@@ -590,7 +602,7 @@
       <CL0>0.20</CL0>
       <AR>2.08</AR>
       <eff>0.80</eff>
-      <CLa>3.1</CLa>
+      <CLa>2.6</CLa>
       <CD0>0.038</CD0>
       <Cem0>0.083</Cem0>
       <Cema>-0.80</Cema>
@@ -605,9 +617,14 @@
       <Cenp>-0.040416</Cenp>
       <CDq>0.055166</CDq>
       <CYq>0.0</CYq>
-      <CLq>7.971792</CLq>
+      <!-- CLq (pitch-rate lift derivative) reduced from advanced_plane's 7.97:
+           at the high pitch RATE of the takeoff rotation, CLq*q*mac/(2V) was adding a
+           transient ~5.6 g lift spike (verified: accel az spiked to -55 m/s^2 during
+           rotation) that ballooned the vehicle past stall and it fell. 2.0 is a
+           physically reasonable, non-spiky value for this low-AR delta. -->
+      <CLq>2.0</CLq>
       <Cellq>0.0</Cellq>
-      <Cemq>-12.140140</Cemq>
+      <Cemq>-8.0</Cemq>
       <Cenq>0.0</Cenq>
       <CDr>0.0</CDr>
       <CYr>0.230299</CYr>
@@ -700,7 +717,14 @@
       <timeConstantUp>0.0125</timeConstantUp>
       <timeConstantDown>0.025</timeConstantDown>
       <maxRotVelocity>3500</maxRotVelocity>
-      <motorConstant>4.9e-05</motorConstant>
+      <!-- Phase-3 thrust tuning (AFTER the thrust-DIRECTION fix above; the earlier
+           values were meaningless because thrust was pointing straight up). 1.1e-4
+           gives max thrust 1.1e-4*3500^2 = 1348 N (T/W about 0.69 at MTOW): enough to
+           accelerate the gear-less target down the low-friction belly "rail" to flying
+           speed and sustain a climb, but well under T/W=1. Consistent with the real
+           Shahed-136's 50 hp (37 kW) engine. Climb rate is bounded by PX4's FW TECS
+           limits, not thrust. -->
+      <motorConstant>1.1e-04</motorConstant>
       <momentConstant>0.01</momentConstant>
       <commandSubTopic>command/motor_speed</commandSubTopic>
       <motorNumber>0</motorNumber>
@@ -709,5 +733,16 @@
       <rotorVelocitySlowdownSim>10</rotorVelocitySlowdownSim>
       <motorType>velocity</motorType>
     </plugin>
+
+    <!-- ================= AIR-START HELPER =================
+      VelocityControl lets the flight harness (shahed_cruise_test.py) inject a
+      cruise velocity via /model/<name>/cmd_vel while the vehicle is spawned in
+      the air. This is INERT by default: with no <initial_linear> and no cmd_vel
+      published, it does nothing and physics/PX4 fully own the model. Used only to
+      keep the target flying at ~50 m/s during PX4/EKF/airspeed warm-up, then the
+      harness stops publishing cmd_vel and PX4 flies it autonomously. A fixed-wing
+      target spawned at REST in the air just free-falls before the estimator and
+      the simulated airspeed sensor can converge; this is the clean, physics-based
+      way to realize the plan's "spawn already flying" target. -->
   </model>
 </sdf>
