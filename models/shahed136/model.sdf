@@ -277,18 +277,28 @@
     <!-- ================= REAR PUSHER ROTOR =================
          Mounted at the TAIL (x = -1.7, behind CG). Adapted from advanced_plane
          rotor_puller. Disk in the Y-Z plane (pose rotated 1.57 about y). -->
+    <!-- Rotor mount pitch = -1.57 (NOT +1.57). VERIFIED by isolated gz thrust test
+         (gravity off, motor spun via raw topic, base mass temporarily 2 kg to make
+         the small displacement visible): mount +1.57 thrusts the airframe BACKWARD,
+         mount -1.57 thrusts FORWARD (+x). turningDirection does NOT change thrust
+         direction here (only the reaction torque); both cw/ccw gave the same sign,
+         so the mount rotation is the real lever. This is the pusher-thrust-sign trap. -->
     <link name='rotor_pusher'>
-      <pose>-1.7 0 0.1 0 1.57 0</pose>
+      <pose>-1.7 0 0.1 0 -1.57 0</pose>
+      <!-- Light rotor (matches advanced_plane rotor_puller) so the motor spins
+           up to commanded velocity. A heavy rotor (was 0.5 kg) never reaches
+           speed under MulticopterMotorModel's JointVelocityCmd -> ~0 thrust.
+           VERIFIED: with this mass the pusher produces real forward thrust. -->
       <inertial>
         <pose>0 0 0 0 0 0</pose>
-        <mass>0.5</mass>
+        <mass>0.005</mass>
         <inertia>
-          <ixx>9.75e-05</ixx>
+          <ixx>9.75e-07</ixx>
           <ixy>0</ixy>
           <ixz>0</ixz>
-          <iyy>0.0083</iyy>
+          <iyy>0.000166704</iyy>
           <iyz>0</iyz>
-          <izz>0.0083</izz>
+          <izz>0.000167604</izz>
         </inertia>
       </inertial>
       <collision name='rotor_pusher_collision'>
@@ -535,28 +545,55 @@
     </plugin>
 
     <!-- ================= AERODYNAMICS: AdvancedLiftDrag =================
-         Adapted from advanced_plane for the Shahed delta.
-         CONFIRMED-ish: area 3.0 m^2, AR = b^2/S = 2.5^2/3.0 = 2.08.
-         ESTIMATED-to-tune in Phase 2 (AVL). CFD seed: CL~0.412, CD~0.078,
-         L/D~5.3 at cruise. CL needed for level cruise @50 m/s,S=3 = 0.435 (matches).
-         - CL0 0.20, CLa 3.2 (low-AR delta -> shallower lift slope than 5.0),
-           CD0 0.035 (rest of CD~0.078 is induced), alpha_stall 0.35 rad.
-         - cp slightly AFT of CG (CG x=+0.119) for static pitch stability -> cp x=-0.05.
-         num_ctrl_surfaces = 4: elevons (idx0,1) + rudders (idx2,3).
-           Elevon mix: symmetric deflection = pitch (Cem_ctrl SAME sign on both),
-           antisymmetric = roll (Cell_ctrl MIRRORED), <direction> OPPOSITE so a
-           common command produces the roll split. Rudders: Cen_ctrl (yaw).
-         Coeff magnitudes taken from advanced_plane as order-of-magnitude seeds.
+      PHASE-2 coefficients. Route: ANALYTICAL (AVL not installed; AVL is a
+      vortex-lattice method that is unreliable for a very low-AR delta at the
+      trim point, which is exactly this vehicle's regime - so analytic
+      low-AR-delta theory + simulation verification was chosen). Every number
+      justified below. Cross-checked against a real isolated-aero gz simulation
+      (spawn @ 50 m/s, no PX4 control, measure vertical accel).
+
+      Geometry: S=3.0 m^2, b=2.5 m -> AR = b^2/S = 2.08. mac=1.3 m.
+      Cruise: 50 m/s, W = 200*9.81 = 1962 N. q = 0.5*1.2041*50^2 = 1505 Pa (SL);
+      CL for level cruise = W/(q*S) = 0.435 (SL) .. 0.47 (1000 m). alpha_stall 0.35 rad.
+
+      LIFT:
+        CL0 = 0.20  - camber/reflex of the delta at alpha=0.
+          VERIFIED: isolated gz glide (spawn 50 m/s, pitch~0) measured a downward
+          accel of ~5.0 m/s^2 vs gravity 9.81 => lift ~ m*(9.81-5.0) ~ 960 N at
+          alpha~0, i.e. CL~0.21 - matches CL0 within noise. Lift sign is UP (good).
+        CLa = 3.1 /rad  - low-AR delta lift slope. Helmbold: 2*pi*AR/(2+sqrt(4+AR^2))
+          = 2.68; slender-body (Jones) pi*AR/2 = 3.27; delta vortex lift pushes it
+          toward the upper end -> 3.1. Trim alpha = (0.435-0.20)/3.1 = 4.3 deg (SL),
+          a realistic delta cruise incidence.
+      DRAG:
+        CD0 = 0.038  - parasitic. Induced drag is AUTO-computed by the plugin as
+          CL^2/(pi*AR*eff). At trim: CDi = 0.435^2/(pi*2.08*0.80)=0.036, so total
+          CD = 0.074 -> L/D = 0.435/0.074 = 5.9 (CFD seed L/D~5.3, same ballpark;
+          cruise thrust = W/(L/D) ~ 332 N). eff (Oswald) 0.80 - low for a delta.
+      PITCH (static stability):
+        Cema = -0.80  - restoring pitch moment slope (nose-down with +alpha).
+          Scaled up from advanced_plane (-0.464) for a shorter, less-damped delta
+          and to guarantee a clear static margin.
+        Cem0 = +0.083 - trims Cem=0 at alpha_trim: Cem0 = -Cema*alpha_trim =
+          0.80*0.075 rad(=4.3deg) = 0.060 .. bumped to 0.083 to trim slightly
+          higher (accounts for 1000 m density). cp offset (below) adds more nose-down.
+      LATERAL/DAMPING (CYb,Cellb,Cenb,Cellp,Cemq,...):
+        Scaled/kept from advanced_plane as physically-reasonable magnitudes for a
+        small fixed-wing; a target only needs credible damping, not exact values.
+        These matter for Phase-3 attitude control, not for the cruise-lift check.
+      num_ctrl_surfaces = 4: elevons (idx0,1) + rudders (idx2,3). Elevon mix:
+        symmetric deflection = pitch (Cem_ctrl SAME sign), antisymmetric = roll
+        (Cell_ctrl MIRRORED, <direction> OPPOSITE). Rudders: Cen_ctrl (yaw).
     -->
     <plugin filename="gz-sim-advanced-lift-drag-system" name="gz::sim::systems::AdvancedLiftDrag">
       <a0>0.0</a0>
       <CL0>0.20</CL0>
       <AR>2.08</AR>
       <eff>0.80</eff>
-      <CLa>3.2</CLa>
-      <CD0>0.035</CD0>
-      <Cem0>0.05</Cem0>
-      <Cema>-0.40</Cema>
+      <CLa>3.1</CLa>
+      <CD0>0.038</CD0>
+      <Cem0>0.083</Cem0>
+      <Cema>-0.80</Cema>
       <CYb>-0.258244</CYb>
       <Cellb>-0.039250</Cellb>
       <Cenb>0.100826</Cenb>
@@ -647,10 +684,13 @@
          Adapted from advanced_plane MulticopterMotorModel.
          motorConstant 4.9e-05 @ maxRotVelocity 3500 => max static thrust ~600 N.
          Cruise thrust required ~370 N (W/(L/D)=1962/5.3) reached at ~78% -> headroom.
-         turningDirection 'ccw' (OPPOSITE the advanced_plane tractor 'cw') because a
-         pusher spins the other way. *** VERIFICAR signo de empuje en pruebas ***
-         (known trap: pusher thrust sign / axis can push backward -> never accelerates).
-         motorConstant is ESTIMATED-to-tune once real cruise thrust is validated.
+         THRUST DIRECTION is set by the rotor MOUNT rotation (-1.57 about y, see rotor
+         link above), NOT by turningDirection. VERIFIED in isolation: with the -1.57
+         mount the pusher thrusts the airframe FORWARD (+x). turningDirection only sets
+         the reaction-torque sign; 'ccw' kept as a pusher-typical convention.
+         Rotor mass 0.005 kg (light, like advanced_plane) so the motor spins up to
+         commanded velocity - a heavy rotor never reaches speed => ~0 thrust.
+         motorConstant is ESTIMATED-to-tune once real cruise thrust is validated (Ph3).
     -->
     <plugin filename="gz-sim-multicopter-motor-model-system"
       name="gz::sim::systems::MulticopterMotorModel">
