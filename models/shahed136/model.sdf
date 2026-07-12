@@ -64,18 +64,23 @@
         </inertia>
       </inertial>
 
-      <!-- Belly "skid" (no landing gear): a low-friction SPHERE the airframe rests on.
-           A flat belly BOX plows against the ground plane during the launch roll (its
-           leading edge generates a large horizontal reaction that the pusher cannot
-           overcome, so it never reaches flying speed; gs plateaued near 7 m/s at full
-           thrust). A single-contact-point sphere slides cleanly, so the pusher
-           accelerates the target down the "rail" to rotation speed. Radius 0.13 sits
-           the wing (z=0) about 0.13 m off the ground, matching the spawn pose. Only
-           matters on the ground; once airborne the collision never contacts anything. -->
+      <!-- Belly "skid" (no landing gear): a WIDE FLAT belly box so the airframe rests
+           LEVEL and STATICALLY STABLE on the ground for EKF alignment.
+           CRITICAL (Phase-3, groundtruth-verified): the earlier single-point low-friction
+           SPHERE (radius 0.13 at z=-0.13) was chosen for a ground launch-roll that we no
+           longer do (we AIR-START). A single contact point with the CG offset forward
+           (x=+0.119) is statically UNSTABLE: the model tipped nose-down and settled at
+           ~147 deg pitch (rest orientation quat y=0.96, w=0.28), so the IMU read gravity
+           in a wildly rotated frame (accel ~[-5.5, 0, +8.0] instead of [0, 0, -9.8]) and
+           PX4/EKF aligned to a ~147 deg-off attitude reference, so every attitude loop
+           diverged and the vehicle tumbled. A wide flat belly box (span of the wing, thin,
+           just below z=0) gives a large stable contact patch so it rests level (verified:
+           rest quat y=0.007, w=1.0; groundtruth ground roll/pitch = 0.0). The belly only
+           matters on the ground; once air-started it never contacts anything. -->
       <collision name='base_link_collision'>
-        <pose>0 0 -0.13 0 0 0</pose>
+        <pose>0 0 -0.14 0 0 0</pose>
         <geometry>
-          <sphere><radius>0.13</radius></sphere>
+          <box><size>1.6 2.2 0.06</size></box>
         </geometry>
         <surface>
           <contact>
@@ -85,8 +90,8 @@
           </contact>
           <friction>
             <ode>
-              <mu>0.05</mu>
-              <mu2>0.05</mu2>
+              <mu>0.6</mu>
+              <mu2>0.6</mu2>
             </ode>
           </friction>
         </surface>
@@ -645,7 +650,23 @@
       <upward>0 0 1</upward>
       <link_name>base_link</link_name>
       <num_ctrl_surfaces>4</num_ctrl_surfaces>
-      <!-- LEFT elevon: direction +1, roll +, pitch + -->
+      <!-- ELEVON MIX (Phase-3, groundtruth + isolated-test verified).
+           AdvancedLiftDrag sums each surface moment as C_ctrl * direction * deflection.
+           PX4's LeftElevon(5)/RightElevon(6) types carry NO built-in mixing (the allocator
+           uses the raw [TRQ_R, TRQ_P, TRQ_Y] vector and inverts it), so PX4 already emits
+           the right servo pattern: +pitch cmd = BOTH elevons the same (symmetric), +roll
+           cmd = elevons OPPOSITE (antisymmetric). The SDF aero must therefore make:
+             symmetric  deflection = PITCH   (both Cem_ctrl*direction SAME sign)
+             antisymmetric deflection = ROLL  (the two Cell_ctrl*direction OPPOSITE sign)
+           The ORIGINAL model had direction=-1 on the right elevon, which flipped BOTH axes,
+           so antisymmetric = PITCH and symmetric = ROLL (BACKWARDS). Verified in isolation:
+           an antisymmetric deflection produced pure pitch (+28 to -66 deg) and ~0 roll, so
+           PX4's roll loop had no authority and the vehicle barrel-rolled to divergence.
+           FIX: both elevons direction=+1; Cem_ctrl SAME sign (symmetric=pitch); Cell_ctrl
+           OPPOSITE sign (antisymmetric=roll). Roll sign then confirmed by flight (PX4
+           commanded +roll rate, vehicle rolled the correct way). Magnitudes boosted for
+           real roll/pitch authority on this heavy low-AR delta (Ixx=52.7). -->
+      <!-- LEFT elevon -->
       <control_surface>
         <name>servo_0</name>
         <index>0</index>
@@ -653,22 +674,21 @@
         <CD_ctrl>-0.000059</CD_ctrl>
         <CY_ctrl>0.000171</CY_ctrl>
         <CL_ctrl>-0.011940</CL_ctrl>
-        <Cell_ctrl>-0.003331</Cell_ctrl>
-        <Cem_ctrl>0.001498</Cem_ctrl>
+        <Cell_ctrl>-0.020000</Cell_ctrl>
+        <Cem_ctrl>0.006000</Cem_ctrl>
         <Cen_ctrl>-0.000057</Cen_ctrl>
       </control_surface>
-      <!-- RIGHT elevon: direction OPPOSITE (+1 kept, mirror via signs),
-           Cell_ctrl MIRRORED (+), Cem_ctrl SAME sign (+) -> symmetric=pitch,
-           antisymmetric=roll. -->
+      <!-- RIGHT elevon: direction +1; Cem SAME sign (symmetric=pitch), Cell OPPOSITE
+           sign (antisymmetric=roll). -->
       <control_surface>
         <name>servo_1</name>
         <index>1</index>
-        <direction>-1</direction>
+        <direction>1</direction>
         <CD_ctrl>-0.000059</CD_ctrl>
         <CY_ctrl>-0.000171</CY_ctrl>
         <CL_ctrl>-0.011940</CL_ctrl>
-        <Cell_ctrl>0.003331</Cell_ctrl>
-        <Cem_ctrl>0.001498</Cem_ctrl>
+        <Cell_ctrl>0.020000</Cell_ctrl>
+        <Cem_ctrl>0.006000</Cem_ctrl>
         <Cen_ctrl>0.000057</Cen_ctrl>
       </control_surface>
       <!-- LEFT rudder (yaw) -->
