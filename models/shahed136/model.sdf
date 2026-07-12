@@ -1,0 +1,673 @@
+<?xml version="1.0"?>
+<!--
+  Shahed-136 (Geran-2) TARGET model for STING interception sim.
+  Phase-1: SIMPLE box geometry (delta plate + fuselage spine + winglets),
+  "first fly, then beautify". Adapted from PX4 advanced_plane.
+
+  Frame convention: SDF/Gazebo body frame is FLU (x=nose/forward, y=left, z=up).
+  PX4 uses FRD internally -> watch Y-sign when authoring CA_* / thrust later
+  (same class of trap as the STING CA_ROTOR*_PY issue).
+
+  ============================================================================
+  GEOMETRY (all boxes, meters), from project_shahed_target_sim specs:
+    - wingspan 2.5 m, length 3.5 m, MTOW ~200 kg, pusher prop, cruise ~50 m/s
+    - Delta wing plate: 1.3 m mean chord (x) x 2.5 m span (y) x 0.12 m thick
+    - Fuselage spine: 3.5 m (x) x 0.35 (y) x 0.35 (z), on top of wing
+    - 2 winglets at tips (vertical fins), rear pusher rotor
+    base_link origin ~ wing geometric centroid; nose at +x, pusher at -x.
+
+  MASS / INERTIA (200 kg) computed by composite rigid-body method
+  (see comment on <inertial> below). NOT arbitrary.
+
+  CONFIRMED numbers: wingspan 2.5, length 3.5, mass 200 kg, cruise 50 m/s.
+  ESTIMATED-to-tune (Phase 2 AVL / Phase 3 control-sign):
+    - wing area 3.0 m^2, AR, mac, all AdvancedLiftDrag coeffs (CL0/CLa/CD0/...)
+    - motorConstant / pusher thrust sign, elevon+rudder control derivatives.
+  ============================================================================
+-->
+<sdf version='1.9'>
+  <model name='shahed136'>
+    <!-- Spawn pose: belly ~0.13 m above origin so belly collision rests on
+         ground when spawned static. Wing half-thickness 0.06 + clearance. -->
+    <pose>0 0 0.15 0 0 0</pose>
+    <self_collide>false</self_collide>
+    <static>false</static>
+
+    <link name='base_link'>
+      <pose>0 0 0 0 0 0</pose>
+      <!--
+        Composite inertia (numpy, cbody-rigid-body method). Components (mass, FLU center):
+          wing plate  90 kg  (1.3 x 2.5 x 0.12) @ (0,0,0)
+          fuselage    30 kg  (3.5 x 0.35 x 0.35) @ (0,0,0.15)
+          warhead     50 kg  (0.6 x 0.35 x 0.30) @ (+1.25,0,0.06)  [dense ogive fwd]
+          engine      28 kg  (0.5 x 0.35 x 0.35) @ (-1.35,0,0.10)  [pusher aft]
+          winglet L/R  1 kg ea (0.5 x 0.05 x 0.45) @ (-0.4, +-1.22, 0.20)
+        => M = 200 kg, CG = [0.119, 0, 0.053] m (FLU).
+           Ixx=52.7 (roll, wide span -> moderate)
+           Iyy=173.8 (pitch)
+           Izz=223.0 (yaw, largest for flat wide delta)  kg*m^2
+           Ixz product = 1.47 (2.8% of Ixx) -> dropped, diagonal tensor used.
+        CG sits ~30% MAC (LE of MAC ~ +0.65, MAC 1.3 -> 30% aft = +0.26; our
+        composite CG lands slightly fwd at +0.119, giving static margin -> stable).
+        <inertial><pose> puts CG at the computed offset from base_link origin.
+      -->
+      <inertial>
+        <pose>0.119 0 0.053 0 0 0</pose>
+        <mass>200.0</mass>
+        <inertia>
+          <ixx>52.7</ixx>
+          <ixy>0</ixy>
+          <ixz>0</ixz>
+          <iyy>173.8</iyy>
+          <iyz>0</iyz>
+          <izz>223.0</izz>
+        </inertia>
+      </inertial>
+
+      <!-- Belly collision (no landing gear): flat plate under the delta wing. -->
+      <collision name='base_link_collision'>
+        <pose>0 0 -0.06 0 0 0</pose>
+        <geometry>
+          <box>
+            <size>2.0 2.5 0.12</size>
+          </box>
+        </geometry>
+        <surface>
+          <contact>
+            <ode>
+              <max_vel>10</max_vel>
+              <min_depth>0.01</min_depth>
+            </ode>
+          </contact>
+          <friction>
+            <ode />
+          </friction>
+        </surface>
+      </collision>
+
+      <!-- ===== VISUALS: simple boxes approximating the clipped delta ===== -->
+      <!-- Main delta wing plate -->
+      <visual name='wing_visual'>
+        <pose>0 0 0 0 0 0</pose>
+        <geometry>
+          <box>
+            <size>1.3 2.5 0.12</size>
+          </box>
+        </geometry>
+        <material>
+          <ambient>0.30 0.30 0.28 1</ambient>
+          <diffuse>0.35 0.35 0.32 1</diffuse>
+        </material>
+      </visual>
+      <!-- Forward wing extension / nose taper (narrower box ahead of wing to
+           suggest the pointed delta apex) -->
+      <visual name='wing_apex_visual'>
+        <pose>0.95 0 0 0 0 0</pose>
+        <geometry>
+          <box>
+            <size>0.7 1.0 0.12</size>
+          </box>
+        </geometry>
+        <material>
+          <ambient>0.30 0.30 0.28 1</ambient>
+          <diffuse>0.35 0.35 0.32 1</diffuse>
+        </material>
+      </visual>
+      <!-- Fuselage spine (BWB centerbody) on top of wing -->
+      <visual name='fuselage_visual'>
+        <pose>0 0 0.20 0 0 0</pose>
+        <geometry>
+          <box>
+            <size>3.5 0.35 0.35</size>
+          </box>
+        </geometry>
+        <material>
+          <ambient>0.22 0.22 0.20 1</ambient>
+          <diffuse>0.26 0.26 0.24 1</diffuse>
+        </material>
+      </visual>
+      <!-- Warhead ogive (dark nose). Cone apex is +Z in its own frame; rotate
+           +1.5708 about y so the apex points along +X (forward). Positioned so
+           the tip protrudes ~0.35 m ahead of the fuselage spine (spine front
+           at x=1.75) and centred on the spine z=0.20 line. -->
+      <visual name='nose_visual'>
+        <pose>1.95 0 0.20 0 1.5708 0</pose>
+        <geometry>
+          <cone><radius>0.20</radius><length>0.7</length></cone>
+        </geometry>
+        <material>
+          <ambient>0.08 0.08 0.08 1</ambient>
+          <diffuse>0.11 0.11 0.11 1</diffuse>
+        </material>
+      </visual>
+      <!-- Left winglet (vertical fin at tip) -->
+      <visual name='winglet_left_visual'>
+        <pose>-0.4 1.22 0.22 0 0 0</pose>
+        <geometry>
+          <box>
+            <size>0.5 0.05 0.45</size>
+          </box>
+        </geometry>
+        <material>
+          <ambient>0.22 0.22 0.20 1</ambient>
+          <diffuse>0.26 0.26 0.24 1</diffuse>
+        </material>
+      </visual>
+      <!-- Right winglet -->
+      <visual name='winglet_right_visual'>
+        <pose>-0.4 -1.22 0.22 0 0 0</pose>
+        <geometry>
+          <box>
+            <size>0.5 0.05 0.45</size>
+          </box>
+        </geometry>
+        <material>
+          <ambient>0.22 0.22 0.20 1</ambient>
+          <diffuse>0.26 0.26 0.24 1</diffuse>
+        </material>
+      </visual>
+
+      <gravity>1</gravity>
+      <velocity_decay />
+      <self_collide>0</self_collide>
+
+      <!-- ================= SENSORS (copied verbatim from advanced_plane;
+           required for PX4 EKF: IMU, baro, mag, GPS) ================= -->
+      <sensor name="imu_sensor" type="imu">
+        <gz_frame_id>base_link</gz_frame_id>
+        <always_on>1</always_on>
+        <update_rate>250</update_rate>
+        <imu>
+          <angular_velocity>
+            <x>
+              <noise type="gaussian">
+                <mean>0</mean>
+                <stddev>0.0003394</stddev>
+                <dynamic_bias_stddev>3.8785e-05</dynamic_bias_stddev>
+                <dynamic_bias_correlation_time>1000</dynamic_bias_correlation_time>
+              </noise>
+            </x>
+            <y>
+              <noise type="gaussian">
+                <mean>0</mean>
+                <stddev>0.0003394</stddev>
+                <dynamic_bias_stddev>3.8785e-05</dynamic_bias_stddev>
+                <dynamic_bias_correlation_time>1000</dynamic_bias_correlation_time>
+              </noise>
+            </y>
+            <z>
+              <noise type="gaussian">
+                <mean>0</mean>
+                <stddev>0.0003394</stddev>
+                <dynamic_bias_stddev>3.8785e-05</dynamic_bias_stddev>
+                <dynamic_bias_correlation_time>1000</dynamic_bias_correlation_time>
+              </noise>
+            </z>
+          </angular_velocity>
+          <linear_acceleration>
+            <x>
+              <noise type="gaussian">
+                <mean>0</mean>
+                <stddev>0.004</stddev>
+                <dynamic_bias_stddev>0.006</dynamic_bias_stddev>
+                <dynamic_bias_correlation_time>300</dynamic_bias_correlation_time>
+              </noise>
+            </x>
+            <y>
+              <noise type="gaussian">
+                <mean>0</mean>
+                <stddev>0.004</stddev>
+                <dynamic_bias_stddev>0.006</dynamic_bias_stddev>
+                <dynamic_bias_correlation_time>300</dynamic_bias_correlation_time>
+              </noise>
+            </y>
+            <z>
+              <noise type="gaussian">
+                <mean>0</mean>
+                <stddev>0.004</stddev>
+                <dynamic_bias_stddev>0.006</dynamic_bias_stddev>
+                <dynamic_bias_correlation_time>300</dynamic_bias_correlation_time>
+              </noise>
+            </z>
+          </linear_acceleration>
+        </imu>
+      </sensor>
+      <sensor name="air_pressure_sensor" type="air_pressure">
+        <gz_frame_id>base_link</gz_frame_id>
+        <always_on>1</always_on>
+        <update_rate>50</update_rate>
+        <air_pressure>
+          <pressure>
+            <noise type="gaussian">
+              <mean>0</mean>
+              <stddev>0.01</stddev>
+            </noise>
+          </pressure>
+        </air_pressure>
+      </sensor>
+      <sensor name="magnetometer_sensor" type="magnetometer">
+        <gz_frame_id>base_link</gz_frame_id>
+        <always_on>1</always_on>
+        <update_rate>100</update_rate>
+        <magnetometer>
+          <x>
+            <noise type="gaussian">
+              <stddev>0.0001</stddev>
+            </noise>
+          </x>
+          <y>
+            <noise type="gaussian">
+              <stddev>0.0001</stddev>
+            </noise>
+          </y>
+          <z>
+            <noise type="gaussian">
+              <stddev>0.0001</stddev>
+            </noise>
+          </z>
+        </magnetometer>
+      </sensor>
+      <sensor name="navsat_sensor" type="navsat">
+        <gz_frame_id>base_link</gz_frame_id>
+        <always_on>1</always_on>
+        <update_rate>30</update_rate>
+      </sensor>
+    </link>
+
+    <!-- ================= REAR PUSHER ROTOR =================
+         Mounted at the TAIL (x = -1.7, behind CG). Adapted from advanced_plane
+         rotor_puller. Disk in the Y-Z plane (pose rotated 1.57 about y). -->
+    <link name='rotor_pusher'>
+      <pose>-1.7 0 0.1 0 1.57 0</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.5</mass>
+        <inertia>
+          <ixx>9.75e-05</ixx>
+          <ixy>0</ixy>
+          <ixz>0</ixz>
+          <iyy>0.0083</iyy>
+          <iyz>0</iyz>
+          <izz>0.0083</izz>
+        </inertia>
+      </inertial>
+      <collision name='rotor_pusher_collision'>
+        <pose>0.0 0 0.0 0 0 0</pose>
+        <geometry>
+          <cylinder>
+            <length>0.02</length>
+            <radius>0.75</radius>
+          </cylinder>
+        </geometry>
+        <surface>
+          <contact>
+            <ode />
+          </contact>
+          <friction>
+            <ode />
+          </friction>
+        </surface>
+      </collision>
+      <visual name='rotor_pusher_visual'>
+        <pose>0 0 0 0 0 0</pose>
+        <geometry>
+          <box>
+            <size>0.05 0.05 1.5</size>
+          </box>
+        </geometry>
+        <material>
+          <ambient>0.05 0.05 0.05 1</ambient>
+          <diffuse>0.08 0.08 0.08 1</diffuse>
+        </material>
+      </visual>
+      <gravity>1</gravity>
+      <velocity_decay />
+      <self_collide>0</self_collide>
+    </link>
+    <joint name='rotor_pusher_joint' type='revolute'>
+      <child>rotor_pusher</child>
+      <parent>base_link</parent>
+      <axis>
+        <xyz>1 0 0</xyz>
+        <limit>
+          <lower>-1e+16</lower>
+          <upper>1e+16</upper>
+        </limit>
+        <dynamics>
+          <spring_reference>0</spring_reference>
+          <spring_stiffness>0</spring_stiffness>
+        </dynamics>
+        <use_parent_model_frame>1</use_parent_model_frame>
+      </axis>
+    </joint>
+
+    <!-- ================= CONTROL SURFACES =================
+         2 elevons (trailing edge) on servo_0/servo_1, 2 winglet rudders on
+         servo_2/servo_3. Massless links + joint-position-controller (advanced_plane
+         pattern). -->
+    <link name="left_elevon">
+      <inertial>
+        <mass>0.00000001</mass>
+        <inertia>
+          <ixx>0.000001</ixx><ixy>0.0</ixy><iyy>0.000001</iyy>
+          <ixz>0.0</ixz><iyz>0.0</iyz><izz>0.000001</izz>
+        </inertia>
+        <pose>-0.6 0.7 0 0 0 0</pose>
+      </inertial>
+      <visual name='left_elevon_visual'>
+        <pose>-0.6 0.7 0 0 0 0</pose>
+        <geometry>
+          <box><size>0.3 1.0 0.05</size></box>
+        </geometry>
+        <material>
+          <ambient>0.6 0.1 0.1 1</ambient>
+          <diffuse>0.7 0.12 0.12 1</diffuse>
+        </material>
+      </visual>
+    </link>
+    <link name="right_elevon">
+      <inertial>
+        <mass>0.00000001</mass>
+        <inertia>
+          <ixx>0.000001</ixx><ixy>0.0</ixy><iyy>0.000001</iyy>
+          <ixz>0.0</ixz><iyz>0.0</iyz><izz>0.000001</izz>
+        </inertia>
+        <pose>-0.6 -0.7 0 0 0 0</pose>
+      </inertial>
+      <visual name='right_elevon_visual'>
+        <pose>-0.6 -0.7 0 0 0 0</pose>
+        <geometry>
+          <box><size>0.3 1.0 0.05</size></box>
+        </geometry>
+        <material>
+          <ambient>0.6 0.1 0.1 1</ambient>
+          <diffuse>0.7 0.12 0.12 1</diffuse>
+        </material>
+      </visual>
+    </link>
+    <link name="left_rudder">
+      <inertial>
+        <mass>0.00000001</mass>
+        <inertia>
+          <ixx>0.000001</ixx><ixy>0.0</ixy><iyy>0.000001</iyy>
+          <ixz>0.0</ixz><iyz>0.0</iyz><izz>0.000001</izz>
+        </inertia>
+        <pose>-0.6 1.22 0.22 0 0 0</pose>
+      </inertial>
+      <visual name='left_rudder_visual'>
+        <pose>-0.6 1.22 0.22 0 0 0</pose>
+        <geometry>
+          <box><size>0.2 0.04 0.4</size></box>
+        </geometry>
+        <material>
+          <ambient>0.6 0.1 0.1 1</ambient>
+          <diffuse>0.7 0.12 0.12 1</diffuse>
+        </material>
+      </visual>
+    </link>
+    <link name="right_rudder">
+      <inertial>
+        <mass>0.00000001</mass>
+        <inertia>
+          <ixx>0.000001</ixx><ixy>0.0</ixy><iyy>0.000001</iyy>
+          <ixz>0.0</ixz><iyz>0.0</iyz><izz>0.000001</izz>
+        </inertia>
+        <pose>-0.6 -1.22 0.22 0 0 0</pose>
+      </inertial>
+      <visual name='right_rudder_visual'>
+        <pose>-0.6 -1.22 0.22 0 0 0</pose>
+        <geometry>
+          <box><size>0.2 0.04 0.4</size></box>
+        </geometry>
+        <material>
+          <ambient>0.6 0.1 0.1 1</ambient>
+          <diffuse>0.7 0.12 0.12 1</diffuse>
+        </material>
+      </visual>
+    </link>
+
+    <!-- servo_0: LEFT elevon (revolute, hinge axis = pitch/y) -->
+    <joint name='servo_0' type='revolute'>
+      <parent>base_link</parent>
+      <child>left_elevon</child>
+      <pose>0.15 0 0 0 0 0</pose>
+      <axis>
+        <xyz>0 1 0</xyz>
+        <limit>
+          <lower>-0.52</lower>
+          <upper>0.52</upper>
+        </limit>
+        <dynamics>
+          <damping>1.000</damping>
+        </dynamics>
+      </axis>
+      <physics><ode><implicit_spring_damper>1</implicit_spring_damper></ode></physics>
+    </joint>
+    <plugin
+      filename="gz-sim-joint-position-controller-system"
+      name="gz::sim::systems::JointPositionController">
+      <joint_name>servo_0</joint_name>
+      <sub_topic>servo_0</sub_topic>
+      <p_gain>10</p_gain>
+      <i_gain>0</i_gain>
+      <d_gain>0</d_gain>
+    </plugin>
+
+    <!-- servo_1: RIGHT elevon -->
+    <joint name='servo_1' type='revolute'>
+      <parent>base_link</parent>
+      <child>right_elevon</child>
+      <pose>0.15 0 0 0 0 0</pose>
+      <axis>
+        <xyz>0 1 0</xyz>
+        <limit>
+          <lower>-0.52</lower>
+          <upper>0.52</upper>
+        </limit>
+        <dynamics>
+          <damping>1.000</damping>
+        </dynamics>
+      </axis>
+      <physics><ode><implicit_spring_damper>1</implicit_spring_damper></ode></physics>
+    </joint>
+    <plugin
+      filename="gz-sim-joint-position-controller-system"
+      name="gz::sim::systems::JointPositionController">
+      <joint_name>servo_1</joint_name>
+      <sub_topic>servo_1</sub_topic>
+      <p_gain>10</p_gain>
+      <i_gain>0</i_gain>
+      <d_gain>0</d_gain>
+    </plugin>
+
+    <!-- servo_2: LEFT rudder (winglet, hinge axis = yaw/z) -->
+    <joint name='servo_2' type='revolute'>
+      <parent>base_link</parent>
+      <child>left_rudder</child>
+      <pose>0.1 0 0 0 0 0</pose>
+      <axis>
+        <xyz>0 0 1</xyz>
+        <limit>
+          <lower>-0.52</lower>
+          <upper>0.52</upper>
+        </limit>
+        <dynamics>
+          <damping>1.000</damping>
+        </dynamics>
+      </axis>
+      <physics><ode><implicit_spring_damper>1</implicit_spring_damper></ode></physics>
+    </joint>
+    <plugin
+      filename="gz-sim-joint-position-controller-system"
+      name="gz::sim::systems::JointPositionController">
+      <joint_name>servo_2</joint_name>
+      <sub_topic>servo_2</sub_topic>
+      <p_gain>10</p_gain>
+      <i_gain>0</i_gain>
+      <d_gain>0</d_gain>
+    </plugin>
+
+    <!-- servo_3: RIGHT rudder -->
+    <joint name='servo_3' type='revolute'>
+      <parent>base_link</parent>
+      <child>right_rudder</child>
+      <pose>0.1 0 0 0 0 0</pose>
+      <axis>
+        <xyz>0 0 1</xyz>
+        <limit>
+          <lower>-0.52</lower>
+          <upper>0.52</upper>
+        </limit>
+        <dynamics>
+          <damping>1.000</damping>
+        </dynamics>
+      </axis>
+      <physics><ode><implicit_spring_damper>1</implicit_spring_damper></ode></physics>
+    </joint>
+    <plugin
+      filename="gz-sim-joint-position-controller-system"
+      name="gz::sim::systems::JointPositionController">
+      <joint_name>servo_3</joint_name>
+      <sub_topic>servo_3</sub_topic>
+      <p_gain>10</p_gain>
+      <i_gain>0</i_gain>
+      <d_gain>0</d_gain>
+    </plugin>
+
+    <!-- ================= AERODYNAMICS: AdvancedLiftDrag =================
+         Adapted from advanced_plane for the Shahed delta.
+         CONFIRMED-ish: area 3.0 m^2, AR = b^2/S = 2.5^2/3.0 = 2.08.
+         ESTIMATED-to-tune in Phase 2 (AVL). CFD seed: CL~0.412, CD~0.078,
+         L/D~5.3 at cruise. CL needed for level cruise @50 m/s,S=3 = 0.435 (matches).
+         - CL0 0.20, CLa 3.2 (low-AR delta -> shallower lift slope than 5.0),
+           CD0 0.035 (rest of CD~0.078 is induced), alpha_stall 0.35 rad.
+         - cp slightly AFT of CG (CG x=+0.119) for static pitch stability -> cp x=-0.05.
+         num_ctrl_surfaces = 4: elevons (idx0,1) + rudders (idx2,3).
+           Elevon mix: symmetric deflection = pitch (Cem_ctrl SAME sign on both),
+           antisymmetric = roll (Cell_ctrl MIRRORED), <direction> OPPOSITE so a
+           common command produces the roll split. Rudders: Cen_ctrl (yaw).
+         Coeff magnitudes taken from advanced_plane as order-of-magnitude seeds.
+    -->
+    <plugin filename="gz-sim-advanced-lift-drag-system" name="gz::sim::systems::AdvancedLiftDrag">
+      <a0>0.0</a0>
+      <CL0>0.20</CL0>
+      <AR>2.08</AR>
+      <eff>0.80</eff>
+      <CLa>3.2</CLa>
+      <CD0>0.035</CD0>
+      <Cem0>0.05</Cem0>
+      <Cema>-0.40</Cema>
+      <CYb>-0.258244</CYb>
+      <Cellb>-0.039250</Cellb>
+      <Cenb>0.100826</Cenb>
+      <CDp>0.0</CDp>
+      <CYp>0.065861</CYp>
+      <CLp>0.0</CLp>
+      <Cellp>-0.487407</Cellp>
+      <Cemp>0.0</Cemp>
+      <Cenp>-0.040416</Cenp>
+      <CDq>0.055166</CDq>
+      <CYq>0.0</CYq>
+      <CLq>7.971792</CLq>
+      <Cellq>0.0</Cellq>
+      <Cemq>-12.140140</Cemq>
+      <Cenq>0.0</Cenq>
+      <CDr>0.0</CDr>
+      <CYr>0.230299</CYr>
+      <CLr>0.0</CLr>
+      <Cellr>0.078165</Cellr>
+      <Cemr>0.0</Cemr>
+      <Cenr>-0.089947</Cenr>
+      <alpha_stall>0.35</alpha_stall>
+      <CLa_stall>-3.85</CLa_stall>
+      <CDa_stall>-0.9233984055</CDa_stall>
+      <Cema_stall>0</Cema_stall>
+      <!-- cp AFT of CG (CG at x=+0.119) for stability -->
+      <cp>-0.05 0.0 0.0</cp>
+      <area>3.0</area>
+      <mac>1.3</mac>
+      <air_density>1.2041</air_density>
+      <forward>1 0 0</forward>
+      <upward>0 0 1</upward>
+      <link_name>base_link</link_name>
+      <num_ctrl_surfaces>4</num_ctrl_surfaces>
+      <!-- LEFT elevon: direction +1, roll +, pitch + -->
+      <control_surface>
+        <name>servo_0</name>
+        <index>0</index>
+        <direction>1</direction>
+        <CD_ctrl>-0.000059</CD_ctrl>
+        <CY_ctrl>0.000171</CY_ctrl>
+        <CL_ctrl>-0.011940</CL_ctrl>
+        <Cell_ctrl>-0.003331</Cell_ctrl>
+        <Cem_ctrl>0.001498</Cem_ctrl>
+        <Cen_ctrl>-0.000057</Cen_ctrl>
+      </control_surface>
+      <!-- RIGHT elevon: direction OPPOSITE (+1 kept, mirror via signs),
+           Cell_ctrl MIRRORED (+), Cem_ctrl SAME sign (+) -> symmetric=pitch,
+           antisymmetric=roll. -->
+      <control_surface>
+        <name>servo_1</name>
+        <index>1</index>
+        <direction>-1</direction>
+        <CD_ctrl>-0.000059</CD_ctrl>
+        <CY_ctrl>-0.000171</CY_ctrl>
+        <CL_ctrl>-0.011940</CL_ctrl>
+        <Cell_ctrl>0.003331</Cell_ctrl>
+        <Cem_ctrl>0.001498</Cem_ctrl>
+        <Cen_ctrl>0.000057</Cen_ctrl>
+      </control_surface>
+      <!-- LEFT rudder (yaw) -->
+      <control_surface>
+        <name>servo_2</name>
+        <index>2</index>
+        <direction>1</direction>
+        <CD_ctrl>0.0</CD_ctrl>
+        <CY_ctrl>-0.003913</CY_ctrl>
+        <CL_ctrl>0.0</CL_ctrl>
+        <Cell_ctrl>-0.000257</Cell_ctrl>
+        <Cem_ctrl>0.0</Cem_ctrl>
+        <Cen_ctrl>0.001613</Cen_ctrl>
+      </control_surface>
+      <!-- RIGHT rudder (yaw), mirrored -->
+      <control_surface>
+        <name>servo_3</name>
+        <index>3</index>
+        <direction>1</direction>
+        <CD_ctrl>0.0</CD_ctrl>
+        <CY_ctrl>-0.003913</CY_ctrl>
+        <CL_ctrl>0.0</CL_ctrl>
+        <Cell_ctrl>0.000257</Cell_ctrl>
+        <Cem_ctrl>0.0</Cem_ctrl>
+        <Cen_ctrl>0.001613</Cen_ctrl>
+      </control_surface>
+    </plugin>
+
+    <!-- ================= REAR PUSHER MOTOR =================
+         Adapted from advanced_plane MulticopterMotorModel.
+         motorConstant 4.9e-05 @ maxRotVelocity 3500 => max static thrust ~600 N.
+         Cruise thrust required ~370 N (W/(L/D)=1962/5.3) reached at ~78% -> headroom.
+         turningDirection 'ccw' (OPPOSITE the advanced_plane tractor 'cw') because a
+         pusher spins the other way. *** VERIFICAR signo de empuje en pruebas ***
+         (known trap: pusher thrust sign / axis can push backward -> never accelerates).
+         motorConstant is ESTIMATED-to-tune once real cruise thrust is validated.
+    -->
+    <plugin filename="gz-sim-multicopter-motor-model-system"
+      name="gz::sim::systems::MulticopterMotorModel">
+      <jointName>rotor_pusher_joint</jointName>
+      <linkName>rotor_pusher</linkName>
+      <turningDirection>ccw</turningDirection>
+      <timeConstantUp>0.0125</timeConstantUp>
+      <timeConstantDown>0.025</timeConstantDown>
+      <maxRotVelocity>3500</maxRotVelocity>
+      <motorConstant>4.9e-05</motorConstant>
+      <momentConstant>0.01</momentConstant>
+      <commandSubTopic>command/motor_speed</commandSubTopic>
+      <motorNumber>0</motorNumber>
+      <rotorDragCoefficient>8.06428e-05</rotorDragCoefficient>
+      <rollingMomentCoefficient>1e-06</rollingMomentCoefficient>
+      <rotorVelocitySlowdownSim>10</rotorVelocitySlowdownSim>
+      <motorType>velocity</motorType>
+    </plugin>
+  </model>
+</sdf>
