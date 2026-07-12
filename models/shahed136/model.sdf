@@ -97,85 +97,138 @@
         </surface>
       </collision>
 
-      <!-- ===== VISUALS: simple boxes approximating the clipped delta ===== -->
-      <!-- Main delta wing plate -->
+      <!-- ============================================================
+           REALISTIC VISUALS (Phase-"beautify"): Shahed-136 / Geran-2
+           blended-wing-body cropped delta. VISUAL-ONLY: physics
+           (inertial/collision/plugins/joints/aero) untouched.
+
+           Real-shape references used (see report):
+             - Wikipedia "HESA Shahed 136": length 3.5 m, span 2.5 m,
+               delta wing, rear pusher prop.
+             - OSMP / Missile Threat (CSIS): wingtip vertical fins extend
+               BOTH above AND below the wing (the -136 signature; -131 is
+               up-only), fuselage centralized and BLENDED into the wing.
+             - mechconcepts / globalsecurity: delta sweep ~45 deg,
+               AR ~= 2.0, rounded (not sharp) nose, 2-blade pusher.
+
+           Construction (FLU body frame, +x nose, +y left, +z up):
+             * WING: <polyline> extruding the cropped-delta TOP-VIEW
+               outline (straight ~45-deg swept LE from a rounded apex out
+               to clipped tips at +-1.25 m span, straight trailing edge).
+               Extruded in local +z by the plate thickness, pose lowered
+               half-thickness so the plate straddles z=0 like the old box.
+             * CENTERBODY: a low ellipsoid faired ON TOP of the wing that
+               blends into it (BWB), tapering forward -> the "spine" is no
+               longer a separate square tube.
+             * NOSE: rounded ellipsoid dome (matches "rounded nose").
+             * 4 WINGLETS: 2 tips x (up + down) tapered fins (the -136 tell).
+           Colour: light grey / weathered beige (typical Geran-2 finish).
+           ============================================================ -->
+      <!-- Main cropped-delta wing (planform extrusion). Polyline points are
+           (x,y) in the wing plane; extruded 0.11 m thick in local +z, so
+           pose z=-0.055 centres the plate on z=0 (belly/collision unchanged).
+           Outline (half by symmetry, CCW): rounded apex up front (+x), swept
+           leading edges out to the clipped tips at |y|=1.25, then straight
+           trailing edge across the tail. -->
       <visual name='wing_visual'>
-        <pose>0 0 0 0 0 0</pose>
+        <pose>0 0 -0.055 0 0 0</pose>
         <geometry>
-          <box>
-            <size>1.3 2.5 0.12</size>
-          </box>
+          <polyline>
+            <height>0.11</height>
+            <point>1.90 0.00</point>
+            <point>1.78 0.12</point>
+            <point>1.40 0.30</point>
+            <point>0.20 0.95</point>
+            <point>-0.55 1.25</point>
+            <point>-0.95 1.25</point>
+            <point>-1.05 1.05</point>
+            <point>-1.05 -1.05</point>
+            <point>-0.95 -1.25</point>
+            <point>-0.55 -1.25</point>
+            <point>0.20 -0.95</point>
+            <point>1.40 -0.30</point>
+            <point>1.78 -0.12</point>
+          </polyline>
         </geometry>
         <material>
-          <ambient>0.30 0.30 0.28 1</ambient>
-          <diffuse>0.35 0.35 0.32 1</diffuse>
+          <ambient>0.52 0.51 0.47 1</ambient>
+          <diffuse>0.66 0.64 0.58 1</diffuse>
+          <specular>0.12 0.12 0.11 1</specular>
         </material>
       </visual>
-      <!-- Forward wing extension / nose taper (narrower box ahead of wing to
-           suggest the pointed delta apex) -->
-      <visual name='wing_apex_visual'>
-        <pose>0.95 0 0 0 0 0</pose>
+      <!-- Blended centerbody (BWB fairing) faired on top of the wing. Low,
+           long ellipsoid running nose->tail so the "fuselage" melts into the
+           wing instead of being a square tube. -->
+      <visual name='centerbody_visual'>
+        <pose>0.15 0 0.05 0 0 0</pose>
         <geometry>
-          <box>
-            <size>0.7 1.0 0.12</size>
-          </box>
+          <ellipsoid><radii>1.95 0.26 0.11</radii></ellipsoid>
         </geometry>
         <material>
-          <ambient>0.30 0.30 0.28 1</ambient>
-          <diffuse>0.35 0.35 0.32 1</diffuse>
+          <ambient>0.50 0.49 0.45 1</ambient>
+          <diffuse>0.63 0.61 0.56 1</diffuse>
+          <specular>0.12 0.12 0.11 1</specular>
         </material>
       </visual>
-      <!-- Fuselage spine (BWB centerbody) on top of wing -->
-      <visual name='fuselage_visual'>
-        <pose>0 0 0.20 0 0 0</pose>
-        <geometry>
-          <box>
-            <size>3.5 0.35 0.35</size>
-          </box>
-        </geometry>
-        <material>
-          <ambient>0.22 0.22 0.20 1</ambient>
-          <diffuse>0.26 0.26 0.24 1</diffuse>
-        </material>
-      </visual>
-      <!-- Warhead ogive (dark nose). Cone apex is +Z in its own frame; rotate
-           +1.5708 about y so the apex points along +X (forward). Positioned so
-           the tip protrudes ~0.35 m ahead of the fuselage spine (spine front
-           at x=1.75) and centred on the spine z=0.20 line. -->
+      <!-- Rounded nose dome (matches the -136's blunt/rounded nose, houses
+           the warhead/optics). Low flat ellipsoid blending off the apex,
+           height matched to the centerbody so the profile stays a slim wedge. -->
       <visual name='nose_visual'>
-        <pose>1.95 0 0.20 0 1.5708 0</pose>
+        <pose>1.78 0 0.05 0 0 0</pose>
         <geometry>
-          <cone><radius>0.20</radius><length>0.7</length></cone>
+          <ellipsoid><radii>0.34 0.20 0.11</radii></ellipsoid>
         </geometry>
         <material>
-          <ambient>0.08 0.08 0.08 1</ambient>
-          <diffuse>0.11 0.11 0.11 1</diffuse>
+          <ambient>0.46 0.45 0.42 1</ambient>
+          <diffuse>0.58 0.56 0.52 1</diffuse>
+          <specular>0.14 0.14 0.13 1</specular>
         </material>
       </visual>
-      <!-- Left winglet (vertical fin at tip) -->
-      <visual name='winglet_left_visual'>
-        <pose>-0.4 1.22 0.22 0 0 0</pose>
+      <!-- ===== 4 WINGTIP FINS: 2 tips x (UP + DOWN) -- the Shahed-136
+           signature (the -131 has upper fins only). Thin tapered boxes,
+           canted slightly outward (toe like real tip fences). ===== -->
+      <!-- Left tip, UPPER fin -->
+      <visual name='winglet_left_up_visual'>
+        <pose>-0.7 1.24 0.24 0.20 0 0</pose>
         <geometry>
-          <box>
-            <size>0.5 0.05 0.45</size>
-          </box>
+          <box><size>0.55 0.04 0.42</size></box>
         </geometry>
         <material>
-          <ambient>0.22 0.22 0.20 1</ambient>
-          <diffuse>0.26 0.26 0.24 1</diffuse>
+          <ambient>0.50 0.49 0.45 1</ambient>
+          <diffuse>0.63 0.61 0.56 1</diffuse>
         </material>
       </visual>
-      <!-- Right winglet -->
-      <visual name='winglet_right_visual'>
-        <pose>-0.4 -1.22 0.22 0 0 0</pose>
+      <!-- Left tip, LOWER fin -->
+      <visual name='winglet_left_down_visual'>
+        <pose>-0.7 1.24 -0.20 -0.20 0 0</pose>
         <geometry>
-          <box>
-            <size>0.5 0.05 0.45</size>
-          </box>
+          <box><size>0.50 0.04 0.34</size></box>
         </geometry>
         <material>
-          <ambient>0.22 0.22 0.20 1</ambient>
-          <diffuse>0.26 0.26 0.24 1</diffuse>
+          <ambient>0.50 0.49 0.45 1</ambient>
+          <diffuse>0.63 0.61 0.56 1</diffuse>
+        </material>
+      </visual>
+      <!-- Right tip, UPPER fin -->
+      <visual name='winglet_right_up_visual'>
+        <pose>-0.7 -1.24 0.24 -0.20 0 0</pose>
+        <geometry>
+          <box><size>0.55 0.04 0.42</size></box>
+        </geometry>
+        <material>
+          <ambient>0.50 0.49 0.45 1</ambient>
+          <diffuse>0.63 0.61 0.56 1</diffuse>
+        </material>
+      </visual>
+      <!-- Right tip, LOWER fin -->
+      <visual name='winglet_right_down_visual'>
+        <pose>-0.7 -1.24 -0.20 0.20 0 0</pose>
+        <geometry>
+          <box><size>0.50 0.04 0.34</size></box>
+        </geometry>
+        <material>
+          <ambient>0.50 0.49 0.45 1</ambient>
+          <diffuse>0.63 0.61 0.56 1</diffuse>
         </material>
       </visual>
 
@@ -335,16 +388,28 @@
           </friction>
         </surface>
       </collision>
-      <visual name='rotor_pusher_visual'>
+      <!-- 2-blade pusher propeller (real -136 uses a 2-blade wooden pusher).
+           The rotor link is already rotated 1.57 about y, so the disk lies in
+           the world Y-Z plane; here local z is the world -x (aft) axis. Blades
+           span in the disk plane; a small spinner hub at the centre. -->
+      <visual name='rotor_blade_visual'>
         <pose>0 0 0 0 0 0</pose>
         <geometry>
-          <box>
-            <size>0.05 0.05 1.5</size>
-          </box>
+          <box><size>0.09 0.02 1.5</size></box>
         </geometry>
         <material>
-          <ambient>0.05 0.05 0.05 1</ambient>
-          <diffuse>0.08 0.08 0.08 1</diffuse>
+          <ambient>0.06 0.05 0.04 1</ambient>
+          <diffuse>0.12 0.10 0.07 1</diffuse>
+        </material>
+      </visual>
+      <visual name='rotor_spinner_visual'>
+        <pose>0 0 0 0 1.5708 0</pose>
+        <geometry>
+          <cone><radius>0.06</radius><length>0.12</length></cone>
+        </geometry>
+        <material>
+          <ambient>0.10 0.10 0.10 1</ambient>
+          <diffuse>0.15 0.15 0.15 1</diffuse>
         </material>
       </visual>
       <gravity>1</gravity>
@@ -381,14 +446,17 @@
         </inertia>
         <pose>-0.6 0.7 0 0 0 0</pose>
       </inertial>
+      <!-- Visual sits at the delta trailing edge (~x=-1.0) so the elevon reads
+           as a hinged flap. Visual pose is render-only; the hinge/inertial pose
+           (servo_0 joint, unchanged) still governs physics. -->
       <visual name='left_elevon_visual'>
-        <pose>-0.6 0.7 0 0 0 0</pose>
+        <pose>-1.0 0.55 0 0 0 0</pose>
         <geometry>
-          <box><size>0.3 1.0 0.05</size></box>
+          <box><size>0.22 0.85 0.04</size></box>
         </geometry>
         <material>
-          <ambient>0.6 0.1 0.1 1</ambient>
-          <diffuse>0.7 0.12 0.12 1</diffuse>
+          <ambient>0.42 0.40 0.37 1</ambient>
+          <diffuse>0.54 0.51 0.47 1</diffuse>
         </material>
       </visual>
     </link>
@@ -402,13 +470,13 @@
         <pose>-0.6 -0.7 0 0 0 0</pose>
       </inertial>
       <visual name='right_elevon_visual'>
-        <pose>-0.6 -0.7 0 0 0 0</pose>
+        <pose>-1.0 -0.55 0 0 0 0</pose>
         <geometry>
-          <box><size>0.3 1.0 0.05</size></box>
+          <box><size>0.22 0.85 0.04</size></box>
         </geometry>
         <material>
-          <ambient>0.6 0.1 0.1 1</ambient>
-          <diffuse>0.7 0.12 0.12 1</diffuse>
+          <ambient>0.42 0.40 0.37 1</ambient>
+          <diffuse>0.54 0.51 0.47 1</diffuse>
         </material>
       </visual>
     </link>
@@ -422,13 +490,13 @@
         <pose>-0.6 1.22 0.22 0 0 0</pose>
       </inertial>
       <visual name='left_rudder_visual'>
-        <pose>-0.6 1.22 0.22 0 0 0</pose>
+        <pose>-0.98 1.24 0.24 0 0 0</pose>
         <geometry>
-          <box><size>0.2 0.04 0.4</size></box>
+          <box><size>0.16 0.035 0.40</size></box>
         </geometry>
         <material>
-          <ambient>0.6 0.1 0.1 1</ambient>
-          <diffuse>0.7 0.12 0.12 1</diffuse>
+          <ambient>0.42 0.40 0.37 1</ambient>
+          <diffuse>0.54 0.51 0.47 1</diffuse>
         </material>
       </visual>
     </link>
@@ -442,13 +510,13 @@
         <pose>-0.6 -1.22 0.22 0 0 0</pose>
       </inertial>
       <visual name='right_rudder_visual'>
-        <pose>-0.6 -1.22 0.22 0 0 0</pose>
+        <pose>-0.98 -1.24 0.24 0 0 0</pose>
         <geometry>
-          <box><size>0.2 0.04 0.4</size></box>
+          <box><size>0.16 0.035 0.40</size></box>
         </geometry>
         <material>
-          <ambient>0.6 0.1 0.1 1</ambient>
-          <diffuse>0.7 0.12 0.12 1</diffuse>
+          <ambient>0.42 0.40 0.37 1</ambient>
+          <diffuse>0.54 0.51 0.47 1</diffuse>
         </material>
       </visual>
     </link>
